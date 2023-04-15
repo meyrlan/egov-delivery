@@ -14,8 +14,7 @@ class DocumentOrderView(APIView):
 
         try:
             client, _ = Client.objects.get_or_create(iin=iin)
-        except Exception as e:
-            print(e)
+        except:
             return Response(
                 status=status.HTTP_404_NOT_FOUND,
                 data={"message": "Invalid IIN"}

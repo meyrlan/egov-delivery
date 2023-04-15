@@ -194,3 +194,19 @@ class ServiceCenter(models.Model):
         max_length=128,
         blank=True,
     )
+    address = models.ForeignKey(
+        Address,
+        verbose_name=_("Address"),
+        on_delete=models.CASCADE,
+    )
+
+    class Meta:
+        verbose_name = _("Service Center")
+        verbose_name_plural = _("Service Centers")
+
+    def __str__(self):
+        return self.service_name
+
+    def get_absolute_url(self):
+        return reverse("_detail", kwargs={"pk": self.pk})
+    
