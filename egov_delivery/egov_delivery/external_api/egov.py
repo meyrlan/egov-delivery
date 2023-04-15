@@ -45,7 +45,7 @@ class Client:
             }
         )
 
-    def get_phone_by_iin(self, iin: str):
+    def get_phone_number_by_iin(self, iin: str):
         self._update_token()
         return requests.get(
             f"http://hakaton.gov4c.kz/api/bmg/check/{iin}/",
@@ -54,16 +54,26 @@ class Client:
             }
         )
 
-    def send_message_by_phone(self, phone: str, smsText: str):
+    def send_message_by_phone_number(self, phone_number: str, message: str):
         self._update_token()
         return requests.post(
-            "http://hakaton-sms.gov4c.kz/api/smsgateway/send",
+            "http://hak-sms123.gov4c.kz/api/smsgateway/send",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._token}"
             },
-            data={
-                "phone": phone,
-                "smsText": smsText
+            json={
+                "phone_number": phone_number,
+                "smsText": message,
+            }
+        )
+
+    def get_document_order(self, request_id: str, iin: str):
+        return requests.get(
+            "http://89.218.80.61/vshep-api/con-sync-service",
+            params={
+                "requestId": request_id,
+                "requestIIN": iin,
+                "token": settings.EGOV_DOCUMENT_ORDER_TOKEN,
             }
         )

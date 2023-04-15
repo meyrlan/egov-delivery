@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_swagger",
+    "drf_yasg",
     "core",
 ]
 
@@ -130,3 +132,4 @@ EGOV_API_USERNAME = "test-operator"
 EGOV_API_PASSWORD = "DjrsmA9RMXRl"
 EGOV_API_CLIENT_ID = "cw-queue-service"
 EGOV_API_GRANT_TYPE = "password"
+EGOV_DOCUMENT_ORDER_TOKEN = "eyJG6943LMReKj_kqdAVrAiPbpRloAfE1fqp0eVAJ-IChQcV-kv3gW-gBAzWztBEdFY"

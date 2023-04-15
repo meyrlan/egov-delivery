@@ -64,8 +64,10 @@ class Client(models.Model):
         self.middlename = user_data.get("middleName")
         self.home_address = user_data.get("regAddress", {}).get("address")
 
-        response = EgovClient().get_phone_by_iin(self.iin)
-        # if response.status_code == 200:
+        response = EgovClient().get_phone_number_by_iin(self.iin)
+        response_json = response.json()
+        if response.status_code == 200 and response_json.get("isExists"):
+            self.phone_number = response_json.get("phone")
 
         super().save(*args, **kwargs)
 
@@ -85,11 +87,12 @@ class Courier(models.Model):
 
 
 class DocumentOrder(models.Model):
-    STATUS_CHOICES = [
-        ('p', 'Pending'),
-        ('r', 'Ready'),
-        ('h', 'Handed'),
-    ]
+    class STATUS(models.IntegerChoices):
+        READY = 0, _("Ready")
+        PAID = 1, _("Paid")
+        COURIER_ASSIGNED = 2, _("Courier assigned")
+        COURIER_ON_THE_WAY = 3, _("Courier on the way")
+        HANDED = 4, _("Handed")
 
     client = models.ForeignKey(
         Client,
@@ -105,14 +108,22 @@ class DocumentOrder(models.Model):
         null=True,
     )
     request_id = models.CharField(
-        _("Apartment"),
+        _("Request ID"),
         max_length=256,
     )
-    status = models.CharField(
-        _("Status"),
-        max_length=10,
-        choices=STATUS_CHOICES
+    status = models.PositiveSmallIntegerField(
+        _("Status"), choices=STATUS.choices, default=STATUS.READY
     )
+
+    class Meta:
+        verbose_name = _("Document Order")
+        verbose_name_plural = _("Document Orders")
+
+    def __str__(self):
+        return f"{self.client.firstname} {self.client.lastname}'s document - {self.request_id}"
+
+    def get_absolute_url(self):
+        return reverse("_detail", kwargs={"pk": self.pk})
 
 
 class Address(models.Model):
@@ -165,6 +176,16 @@ class Address(models.Model):
         related_name="address",
         on_delete=models.DO_NOTHING,
     )
+
+    class Meta:
+        verbose_name = _("Address")
+        verbose_name_plural = _("Addresses")
+
+    def __str__(self):
+        return f"{self.street} - {self.house_number} ({self.region}, {self.city})"
+
+    def get_absolute_url(self):
+        return reverse("_detail", kwargs={"pk": self.pk})
 
 
 class ServiceCenter(models.Model):
