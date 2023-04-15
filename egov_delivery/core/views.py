@@ -1,8 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, UpdateAPIView
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 from core.serializers import *
 from core.models import *
@@ -68,5 +69,33 @@ class UserViewSet(ModelViewSet):
 
 
 class DocumentOrderList(ListAPIView):
-    queryset = DocumentOrder.objects.filter(status=DocumentOrder.STATUS.PAID)
+    queryset = DocumentOrder.objects.all()
     serializer_class = DocumentOrderInfoSerializer
+
+    def get_queryset(self):
+        return DocumentOrder.objects.filter(status=DocumentOrder.STATUS.PAID,
+                                            courier__courier_company__name=self.kwargs['courier_company'])
+
+
+class DocumentOrderUpdate(UpdateAPIView):
+    queryset = DocumentOrder.objects.all()
+    serializer_class = DocumentOrderInfoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        courier = request.data.get('courier', None)
+
+        if courier and not instance.courier and request.user.role == User.ROLE.COURIER:
+            self.perform_update(serializer)
+            return Response(serializer.data)
+
+        return Response(
+            status=status.HTTP_400_BAD_REQUEST,
+            data={"message": }
+        )

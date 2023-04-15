@@ -132,6 +132,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=12,
         validators=[validate_iin],
         unique=True,
+        primary_key=True,
     )
     phone_number = PhoneNumberField(verbose_name=_("Phone number"))
     password = models.CharField(_("Password"), max_length=30)
@@ -302,6 +303,39 @@ class ServiceCenter(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse("_detail", kwargs={"pk": self.pk})
+
+
+class Payment(models.Model):
+    class STATUS(models.IntegerChoices):
+        PENDING = 0, _("Pending")
+        SUCCESSFUL = 1, _("Successful")
+        FAILED = 2, _("Failed")
+
+    client = models.ForeignKey(
+        "core.Client",
+        verbose_name=_("Client"),
+        related_name="payments",
+        on_delete=models.DO_NOTHING,
+    )
+    document_order = models.OneToOneField(
+        "core.DocumentOrder",
+        verbose_name=_("Document Order"),
+        related_name="payment",
+        on_delete=models.DO_NOTHING,
+    )
+    status = models.PositiveSmallIntegerField(
+        _("Status"), choices=STATUS.choices, default=STATUS.PENDING
+    )
+
+    class Meta:
+        verbose_name = _("Payment")
+        verbose_name_plural = _("Payments")
+
+    def __str__(self):
+        return f"{self.document_order} - {self.status.name}"
 
     def get_absolute_url(self):
         return reverse("_detail", kwargs={"pk": self.pk})
