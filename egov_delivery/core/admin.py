@@ -21,3 +21,44 @@ class ClientModelAdmin(admin.ModelAdmin):
             readonly_fields += ['firstname', 'middlename',
                                 'lastname', 'home_address', 'cashback']
         return readonly_fields
+
+
+@admin.register(ServiceCenter)
+class ServiceCenterAdminModel(admin.ModelAdmin):
+    list_display = (
+        'name',
+        'address',
+    )
+
+
+class UserAdminInline(admin.TabularInline):
+    model = User
+
+
+@admin.register(CourierCompany)
+class CourierCompanyAdminModel(admin.ModelAdmin):
+    list_display = (
+        'name',
+    )
+    inlines = [
+        UserAdminInline,
+    ]
+
+
+@admin.register(User)
+class CourierAdminModel(admin.ModelAdmin):
+    list_display = (
+        "iin",
+        "phone_number",
+        "courier_company",
+    )
+
+
+@admin.register(Address)
+class AddressAdminModel(admin.ModelAdmin):
+    list_display = (
+        "street",
+        "house_number",
+        "region",
+        "city",
+    )

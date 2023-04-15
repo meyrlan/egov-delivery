@@ -1,4 +1,6 @@
 from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.generics import ListAPIView
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -24,16 +26,47 @@ class DocumentOrderView(APIView):
             request_id=request_id,
             iin=iin,
         )
-        if document_response.status_code != 200:
+        document_json = document_response.json()
+        if document_response.status_code != 200 or document_json.get("data", {}).get("resultCode") != "OK":
             return Response(
                 status=status.HTTP_404_NOT_FOUND,
                 data={"message": "Invalid request ID"}
             )
 
-        document_order, _ = DocumentOrder.objects.get_or_create(
-            client=client,
-            request_id=request_id,
-        )
+        try:
+            document_order, _ = DocumentOrder.objects.get_or_create(
+                client=client,
+                request_id=request_id,
+                service_center=ServiceCenter.objects.first(),
+                service_name=document_json.get("data", {}).get(
+                    "serviceType", {}).get("nameRu", "Неизвестно"),
+            )
+        except Exception as e:
+            print(e)
+            return Response(
+                status=status.HTTP_404_NOT_FOUND,
+                data={"message": e}
+            )
 
         serializer = DocumentOrderInfoSerializer(document_order)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AddressViewSet(ModelViewSet):
+    queryset = Address.objects.all()
+    serializer_class = AddressSerializer
+
+
+class CourierCompanyViewSet(ModelViewSet):
+    queryset = CourierCompany.objects.all()
+    serializer_class = CourierCompanySerializer
+
+
+class UserViewSet(ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+
+class DocumentOrderList(ListAPIView):
+    queryset = DocumentOrder.objects.filter(status=DocumentOrder.STATUS.PAID)
+    serializer_class = DocumentOrderInfoSerializer

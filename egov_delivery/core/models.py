@@ -1,9 +1,10 @@
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.auth.base_user import BaseUserManager
 
 from egov_delivery.external_api.egov import Client as EgovClient
 
@@ -82,8 +83,82 @@ class Client(models.Model):
         return reverse("_detail", kwargs={"pk": self.pk})
 
 
-class Courier(models.Model):
+class CourierCompany(models.Model):
+    name = models.CharField(
+        _("Name"),
+        max_length=128,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = _("Courier company")
+        verbose_name_plural = _("Courier companies")
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("_detail", kwargs={"pk": self.pk})
+
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, iin, password, **extra_fields):
+        if not iin:
+            raise ValueError(_('IIN field must be set'))
+        user = self.model(iin=iin, **extra_fields)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def create_superuser(self, iin, password, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError(_('Superuser must have is_staff=True.'))
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError(_('Superuser must have is_superuser=True.'))
+        return self.create_user(iin, password, **extra_fields)
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    class ROLE(models.IntegerChoices):
+        ADMIN = 0, _("Admin")
+        COURIER = 1, _("Courier")
+        SERVICE_MANAGER = 2, _("Service manager")
+
+    iin = models.CharField(
+        _("IIN"),
+        max_length=12,
+        validators=[validate_iin],
+        unique=True,
+    )
     phone_number = PhoneNumberField(verbose_name=_("Phone number"))
+    password = models.CharField(_("Password"), max_length=30)
+    is_staff = models.BooleanField(_("Admin"), default=False)
+    role = models.PositiveSmallIntegerField(
+        _("Status"), choices=ROLE.choices, default=ROLE.ADMIN)
+    courier_company = models.ForeignKey(
+        CourierCompany,
+        verbose_name=_("Courier company"),
+        related_name="couriers",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    service_center = models.ForeignKey(
+        "core.ServiceCenter",
+        verbose_name=_("Service center"),
+        related_name="service_managers",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    USERNAME_FIELD = "iin"
+    REQUIRED_FIELD = ["phone", "password"]
+
+    objects = CustomUserManager()
 
 
 class DocumentOrder(models.Model):
@@ -95,17 +170,36 @@ class DocumentOrder(models.Model):
         HANDED = 4, _("Handed")
 
     client = models.ForeignKey(
-        Client,
+        "core.Client",
         verbose_name=_("Client"),
         related_name="document_orders",
         on_delete=models.DO_NOTHING,
     )
     courier = models.ForeignKey(
-        Courier,
+        "core.User",
         verbose_name=_("Courier"),
         related_name="document_orders",
         on_delete=models.DO_NOTHING,
         null=True,
+    )
+    service_center = models.ForeignKey(
+        "core.ServiceCenter",
+        verbose_name=_("Service Center"),
+        related_name="document_orders",
+        on_delete=models.DO_NOTHING,
+        blank=True,
+    )
+    delivery_address = models.ForeignKey(
+        "core.Address",
+        verbose_name=_("Delivery Address"),
+        related_name="delivery_address",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    service_name = models.CharField(
+        _("Service Name"),
+        max_length=256,
     )
     request_id = models.CharField(
         _("Request ID"),
@@ -114,6 +208,18 @@ class DocumentOrder(models.Model):
     status = models.PositiveSmallIntegerField(
         _("Status"), choices=STATUS.choices, default=STATUS.READY
     )
+    delivery_datetime = models.DateTimeField(
+        _("Delivery datetime"),
+        null=True,
+        blank=True,
+    )
+
+    def save(self, *args, **kwargs):
+        if ServiceCenter.objects.count() == 0:
+            raise ValidationError("No Service Center in Database")
+        if not self.service_center:
+            self.service_center = ServiceCenter.objects.first()
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Document Order")
@@ -143,38 +249,29 @@ class Address(models.Model):
         _("House number"),
         max_length=128,
     )
-    apartment = models.IntegerField(
+    apartment = models.CharField(
         _("Apartment"),
-        validators=[MinValueValidator(1)],
-    )
-    entrance = models.IntegerField(
-        _("Entrance"),
-        validators=[MinValueValidator(1)],
-    )
-    floor = models.IntegerField(
-        _("Floor"),
-        validators=[MinValueValidator(0)],
-    )
-    block = models.IntegerField(
-        _("Block"),
-        validators=[MinValueValidator(1)],
-        blank=True,
-    )
-    apartment_complex = models.CharField(
-        _("Apartment complex"),
         max_length=128,
-        blank=True,
+    )
+    entrance = models.CharField(
+        _("Entrance"),
+        max_length=128,
+    )
+    floor = models.CharField(
+        _("Floor"),
+        max_length=128,
+    )
+    block = models.CharField(
+        _("Block"),
+        max_length=128,
+    )
+    house_name = models.CharField(
+        _("House Name"),
+        max_length=128,
     )
     additional_information = models.TextField(
         _("Additional information"),
-        max_length=512,
-        blank=True,
-    )
-    document_order = models.ForeignKey(
-        DocumentOrder,
-        verbose_name=_("Document order"),
-        related_name="address",
-        on_delete=models.DO_NOTHING,
+        max_length=128,
     )
 
     class Meta:
@@ -189,13 +286,12 @@ class Address(models.Model):
 
 
 class ServiceCenter(models.Model):
-    service_name = models.CharField(
-        _("Service Name"),
+    name = models.CharField(
+        _("Name"),
         max_length=128,
-        blank=True,
     )
     address = models.ForeignKey(
-        Address,
+        "core.Address",
         verbose_name=_("Address"),
         on_delete=models.CASCADE,
     )
@@ -205,8 +301,7 @@ class ServiceCenter(models.Model):
         verbose_name_plural = _("Service Centers")
 
     def __str__(self):
-        return self.service_name
+        return self.name
 
     def get_absolute_url(self):
         return reverse("_detail", kwargs={"pk": self.pk})
-    

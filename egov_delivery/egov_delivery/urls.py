@@ -26,7 +26,6 @@ schema_view = get_schema_view(
         default_version='v1',
         description="Swagger Egov Delivery",
         terms_of_service="https://www.ourapp.com/policies/terms/",
-        contact=openapi.Contact(email="contact@swaggerBlog.local"),
         license=openapi.License(name="Test License"),
     ),
     public=True,
