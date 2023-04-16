@@ -32,7 +32,15 @@ class CourierCompanies(APIView):
     def get(self, request, format=None):
         request_id = request.GET.get("request_id")
         document_order = DocumentOrder.objects.filter(
-            request_id=request_id).first_or_404()
+            request_id=request_id).first()
+
+        if not document_order:
+            return Response(
+                status=status.HTTP_404_NOT_FOUND,
+                data={
+                    "message": f"Document Order with request ID {request_id} not found."}
+            )
+
         payment_amount = get_route_payment_amount(
             document_order.delivery_address,
             document_order.service_center.address
@@ -42,8 +50,10 @@ class CourierCompanies(APIView):
             companies.append({
                 "id": company.id,
                 "name": company.name,
-                "price": company.price_coefficient * payment_amount,
+                "price": float(float(company.price_coefficient) * float(payment_amount)),
             })
+
+        print(companies)
 
         return Response(
             status=status.HTTP_200_OK,
@@ -209,7 +219,16 @@ class DocumentOrderByCompanyList(ListAPIView):
 
     def get_queryset(self):
         return DocumentOrder.objects.filter(status=DocumentOrder.STATUS.PAID,
-                                            courier__courier_company__id=self.kwargs['id'])
+                                            courier_company__id=self.kwargs['id'])
+
+
+class DocumentOrderByCourierList(ListAPIView):
+    queryset = DocumentOrder.objects.all()
+    serializer_class = DocumentOrderInfoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DocumentOrder.objects.filter(courier=self.request.user)
 
 
 class DocumentOrderRetrieveView(RetrieveAPIView):
@@ -251,11 +270,15 @@ class DocumentOrderUpdateView(UpdateAPIView):
             document_order.service_center.address,
         )
 
-        if is_cashback_used:
+        print(amount)
+
+        if is_cashback_used == True:
             amount -= document_order.client.cashback
-        else:
+        elif is_cashback_used == False:
             document_order.client.cashback += Decimal(float(amount) * 0.05)
             document_order.client.save()
+
+        print(amount)
 
         checkout_session = stripe.checkout.Session.create(
             line_items=[
@@ -276,11 +299,11 @@ class DocumentOrderUpdateView(UpdateAPIView):
                 },
             },
             mode="payment",
-            success_url=f"{settings.FRONTEND_URL}/ordered/{request_id}?iin={document_order.client.iin}",
-            cancel_url=f"{settings.FRONTEND_URL}/ordered/{request_id}?iin={document_order.client.iin}",
+            success_url=f"{settings.FRONTEND_URL}/ordered?request_id={request_id}&iin={document_order.client.iin}",
+            cancel_url=f"{settings.FRONTEND_URL}/ordered?request_id={request_id}&iin={document_order.client.iin}",
         )
-        document_order.status = DocumentOrder.STATUS.PAID
-        document_order.save()
+        # document_order.status = DocumentOrder.STATUS.PAID
+        # document_order.save() # Uncomment if stripe doesn't work
         self.partial_update(request, *args, **kwargs)
         return Response(
             status=status.HTTP_200_OK,
@@ -293,7 +316,7 @@ class DocumentOrderList(ListAPIView):
     serializer_class = DocumentOrderInfoSerializer
 
     def get_queryset(self):
-        return DocumentOrder.objects.filter(status not in [DocumentOrder.STATUS.READY, DocumentOrder.STATUS.HANDED])
+        return DocumentOrder.objects.exclude(status__in=[DocumentOrder.STATUS.READY, DocumentOrder.STATUS.HANDED])
 
 
 class DocumentOrderPickView(APIView):
@@ -316,6 +339,8 @@ class DocumentOrderPickView(APIView):
                 data={"message": "This order already has assigned courier"}
             )
 
+        print(request.user)
+
         if request.user.role != User.ROLE.COURIER:
             return Response(
                 status=status.HTTP_400_BAD_REQUEST,
@@ -327,11 +352,15 @@ class DocumentOrderPickView(APIView):
         document_order.courier_code = get_random_code(4)
         document_order.save()
 
-        EgovClient().send_message_by_phone_number(str(document_order.client.phone_number),
-                                                  f"На ваш заказ с номером {document_order.request_id} назначен курьер {document_order.courier.full_name}. Время назначения курьера {datetime.datetime.now()}")
+        if document_order.trusted_client:
+            EgovClient().send_message_by_phone_number(str(document_order.trusted_client.phone_number),
+                                                      f"На ваш заказ с номером {document_order.request_id} назначен курьер {document_order.courier.full_name}. Время назначения курьера {datetime.datetime.now().strftime('%Y/%m/%d %H:%M')}")
+        else:
+            EgovClient().send_message_by_phone_number(str(document_order.client.phone_number),
+                                                      f"На ваш заказ с номером {document_order.request_id} назначен курьер {document_order.courier.full_name}. Время назначения курьера {datetime.datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
         EgovClient().send_message_by_phone_number(str(document_order.courier.phone_number),
-                                                  f"Заказ с номером {document_order.request_id} готов для выдачи по адресу {document_order.service_center.name}. Сообщите этот код оператору: {document_order.courier_code}")
+                                                  f"Заказ с номером {document_order.request_id} готов для выдачи по адресу {document_order.service_center.name} ({document_order.service_center.address.street} {document_order.service_center.address.house_number}). Сообщите этот код оператору: {document_order.courier_code}")
 
         return Response(
             status=status.HTTP_200_OK,
@@ -410,8 +439,12 @@ class DocumentOrderApproveView(APIView):
         document_order.client_code = get_random_code(4)
         document_order.save()
 
-        EgovClient().send_message_by_phone_number(str(document_order.client.phone_number),
-                                                  f"Заказ с номером {document_order.request_id} будет доставлен в {document_order.delivery_datetime}. Сообщите этот код курьеру: {document_order.client_code}")
+        if document_order.trusted_client:
+            EgovClient().send_message_by_phone_number(str(document_order.trusted_client.phone_number),
+                                                      f"Заказ с номером {document_order.request_id} будет доставлен в {document_order.delivery_datetime.strftime('%Y/%m/%d %H:%M')}. Сообщите этот код курьеру: {document_order.client_code}")
+        else:
+            EgovClient().send_message_by_phone_number(str(document_order.client.phone_number),
+                                                      f"Заказ с номером {document_order.request_id} будет доставлен в {document_order.delivery_datetime.strftime('%Y/%m/%d %H:%M')}. Сообщите этот код курьеру: {document_order.client_code}")
 
         return Response(
             status=status.HTTP_200_OK,
@@ -447,7 +480,7 @@ class DocumentOrderHandView(APIView):
                 data={"message": "Invalid client code"}
             )
 
-        document_order.status = DocumentOrder.STATUS.COURIER_ON_THE_WAY
+        document_order.status = DocumentOrder.STATUS.HANDED
         document_order.save()
 
         return Response(

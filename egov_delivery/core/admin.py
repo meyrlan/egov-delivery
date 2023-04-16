@@ -13,19 +13,21 @@ class ClientModelAdmin(admin.ModelAdmin):
         'iin',
         'home_address',
         'cashback',
+        'phone_number',
     )
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         if obj:
             readonly_fields += ['firstname', 'middlename',
-                                'lastname', 'home_address', 'cashback']
+                                'lastname', 'home_address']
         return readonly_fields
 
 
 @admin.register(ServiceCenter)
 class ServiceCenterAdminModel(admin.ModelAdmin):
     list_display = (
+        "id",
         'name',
         'address',
     )
@@ -38,6 +40,7 @@ class UserAdminInline(admin.TabularInline):
 @admin.register(CourierCompany)
 class CourierCompanyAdminModel(admin.ModelAdmin):
     list_display = (
+        "id",
         'name',
     )
     inlines = [

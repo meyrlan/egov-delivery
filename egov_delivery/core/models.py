@@ -8,6 +8,7 @@ from django.contrib.auth.base_user import BaseUserManager
 
 from egov_delivery.external_api.egov import Client as EgovClient
 from core.utils import get_address_lat_lng
+import random
 
 
 def validate_iin(iin: str):
@@ -93,6 +94,15 @@ class CourierCompany(models.Model):
         max_length=128,
         unique=True,
     )
+    price_coefficient = models.DecimalField(
+        _("Price Coefficient"),
+        max_digits=9, decimal_places=6, blank=True,
+    )
+
+    def save(self, *args, **kwargs):
+        if not self.price_coefficient:
+            self.price_coefficient = round(random.uniform(0.7, 1.2), 6)
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Courier company")
@@ -179,8 +189,27 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
-    def get_full_name(self):
-        return f"{self.last_name} {self.first_name} {self.middle_name}"
+    @property
+    def full_name(self):
+        return f"{self.lastname} {self.firstname} {self.middlename}"
+
+    def save(self, *args, **kwargs):
+
+        response = EgovClient().get_user_by_iin(self.iin)
+        if response.status_code != 200:
+            raise ValidationError("Invalid IIN")
+
+        user_data = response.json()
+        self.firstname = user_data.get("firstName")
+        self.lastname = user_data.get("lastName")
+        self.middlename = user_data.get("middleName")
+
+        response = EgovClient().get_phone_number_by_iin(self.iin)
+        response_json = response.json()
+        if response.status_code == 200 and response_json.get("isExists"):
+            self.phone_number = response_json.get("phone")
+
+        super().save(*args, **kwargs)
 
 
 class DocumentOrder(models.Model):
@@ -258,7 +287,7 @@ class DocumentOrder(models.Model):
         blank=True,
     )
     client_code = models.SmallIntegerField(
-        _("Courier code"),
+        _("Client code"),
         null=True,
         blank=True,
     )

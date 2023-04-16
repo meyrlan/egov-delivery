@@ -34,7 +34,10 @@ class DocumentOrderInfoSerializer(serializers.ModelSerializer):
     client = ClientInfoSerializer()
     trusted_client = ClientInfoSerializer()
     courier = CourierInfoSerializer()
-    delivery_address = AddressSerializer()
+    delivery_address = serializers.SerializerMethodField()
+
+    def get_delivery_address(self, document_order):
+        return document_order.delivery_address.__str__()
 
     class Meta:
         model = DocumentOrder
@@ -50,6 +53,15 @@ class DocumentOrderUpdateSerializer(serializers.ModelSerializer):
         many=False,
     )
     delivery_address = AddressSerializer()
+
+    def update(self, instance, validated_data):
+        address = validated_data.pop("delivery_address", None)
+        print(address)
+        if not instance.delivery_address:
+            print("akjsdaskjhd")
+            instance.delivery_address = Address.objects.create(**address)
+            instance.save()
+        return super().update(instance, validated_data)
 
     class Meta:
         model = DocumentOrder

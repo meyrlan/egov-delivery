@@ -1,4 +1,6 @@
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from django.conf import settings
 
 
@@ -55,25 +57,47 @@ class Client:
         )
 
     def send_message_by_phone_number(self, phone_number: str, message: str):
+        if phone_number[0] == '+':
+            phone_number = phone_number[1:]
         self._update_token()
-        return requests.post(
+        response = requests.post(
             "http://hak-sms123.gov4c.kz/api/smsgateway/send",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._token}"
             },
             json={
-                "phone_number": phone_number,
+                "phone": phone_number,
                 "smsText": message,
             }
         )
+        print(response.status_code)
+        print(response.text)
+        return response
 
     def get_document_order(self, request_id: str, iin: str):
-        return requests.get(
-            "http://89.218.80.61/vshep-api/con-sync-service",
-            params={
-                "requestId": request_id,
-                "requestIIN": iin,
-                "token": settings.EGOV_DOCUMENT_ORDER_TOKEN,
-            }
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 503, 504],
+            method_whitelist=["HEAD", "GET", "OPTIONS"]
         )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        http = requests.Session()
+        http.mount("http://", adapter)
+        http.mount("https://", adapter)
+        try:
+            response = http.get(
+                "http://89.218.80.61/vshep-api/con-sync-service",
+                params={
+                    "requestId": request_id,
+                    "requestIIN": iin,
+                    "token": settings.EGOV_DOCUMENT_ORDER_TOKEN,
+                },
+                timeout=1
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as err:
+            print(f"Error: {err}")
+            raise
+        return response

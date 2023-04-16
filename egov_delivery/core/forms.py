@@ -5,7 +5,7 @@ from core.models import *
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
-        fields = ('iin',)
+        fields = ('iin', 'cashback', 'phone_number')
 
 
 class AddressForm(forms.ModelForm):
