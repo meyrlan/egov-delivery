@@ -6,3 +6,11 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = ('iin',)
+
+
+class AddressForm(forms.ModelForm):
+    class Meta:
+        model = Address
+        fields = ['region', 'city',
+                  'street', 'house_number', 'apartment',
+                  'entrance', 'floor', 'block', 'house_name', 'additional_information']

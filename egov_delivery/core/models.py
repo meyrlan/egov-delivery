@@ -7,6 +7,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.contrib.auth.base_user import BaseUserManager
 
 from egov_delivery.external_api.egov import Client as EgovClient
+from core.utils import get_address_lat_lng
 
 
 def validate_iin(iin: str):
@@ -64,6 +65,9 @@ class Client(models.Model):
         self.lastname = user_data.get("lastName")
         self.middlename = user_data.get("middleName")
         self.home_address = user_data.get("regAddress", {}).get("address")
+        home_address_index = self.home_address.find("квартира")
+        if home_address_index != -1:
+            self.home_address = self.home_address[10:home_address_index]
 
         response = EgovClient().get_phone_number_by_iin(self.iin)
         response_json = response.json()
@@ -127,6 +131,21 @@ class User(AbstractBaseUser, PermissionsMixin):
         COURIER = 1, _("Courier")
         SERVICE_MANAGER = 2, _("Service manager")
 
+    firstname = models.CharField(
+        _("First Name"),
+        max_length=128,
+        blank=True,
+    )
+    middlename = models.CharField(
+        _("Middle Name"),
+        max_length=128,
+        blank=True,
+    )
+    lastname = models.CharField(
+        _("Last Name"),
+        max_length=128,
+        blank=True,
+    )
     iin = models.CharField(
         _("IIN"),
         max_length=12,
@@ -135,7 +154,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         primary_key=True,
     )
     phone_number = PhoneNumberField(verbose_name=_("Phone number"))
-    password = models.CharField(_("Password"), max_length=30)
     is_staff = models.BooleanField(_("Admin"), default=False)
     role = models.PositiveSmallIntegerField(
         _("Status"), choices=ROLE.choices, default=ROLE.ADMIN)
@@ -161,6 +179,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
+    def get_full_name(self):
+        return f"{self.last_name} {self.first_name} {self.middle_name}"
+
 
 class DocumentOrder(models.Model):
     class STATUS(models.IntegerChoices):
@@ -174,20 +195,36 @@ class DocumentOrder(models.Model):
         "core.Client",
         verbose_name=_("Client"),
         related_name="document_orders",
-        on_delete=models.DO_NOTHING,
+        on_delete=models.CASCADE,
+    )
+    trusted_client = models.ForeignKey(
+        "core.Client",
+        verbose_name=_("Trusted client"),
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
     )
     courier = models.ForeignKey(
         "core.User",
         verbose_name=_("Courier"),
         related_name="document_orders",
-        on_delete=models.DO_NOTHING,
+        on_delete=models.CASCADE,
         null=True,
+        blank=True,
+    )
+    courier_company = models.ForeignKey(
+        "core.CourierCompany",
+        verbose_name=_("Courier Company"),
+        related_name="document_orders",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     service_center = models.ForeignKey(
         "core.ServiceCenter",
         verbose_name=_("Service Center"),
         related_name="document_orders",
-        on_delete=models.DO_NOTHING,
+        on_delete=models.CASCADE,
         blank=True,
     )
     delivery_address = models.ForeignKey(
@@ -205,6 +242,7 @@ class DocumentOrder(models.Model):
     request_id = models.CharField(
         _("Request ID"),
         max_length=256,
+        primary_key=True,
     )
     status = models.PositiveSmallIntegerField(
         _("Status"), choices=STATUS.choices, default=STATUS.READY
@@ -214,6 +252,20 @@ class DocumentOrder(models.Model):
         null=True,
         blank=True,
     )
+    courier_code = models.SmallIntegerField(
+        _("Courier code"),
+        null=True,
+        blank=True,
+    )
+    client_code = models.SmallIntegerField(
+        _("Courier code"),
+        null=True,
+        blank=True,
+    )
+    lat = models.DecimalField(
+        _("Latitude"), max_digits=9, decimal_places=6, blank=True, null=True)
+    lng = models.DecimalField(
+        _("Longitude"), max_digits=9, decimal_places=6, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if ServiceCenter.objects.count() == 0:
@@ -237,43 +289,73 @@ class Address(models.Model):
     region = models.CharField(
         _("Region"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     city = models.CharField(
         _("City"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     street = models.CharField(
         _("Street"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     house_number = models.CharField(
         _("House number"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     apartment = models.CharField(
         _("Apartment"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     entrance = models.CharField(
         _("Entrance"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     floor = models.CharField(
         _("Floor"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     block = models.CharField(
         _("Block"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     house_name = models.CharField(
         _("House Name"),
         max_length=128,
+        null=True,
+        blank=True,
     )
     additional_information = models.TextField(
         _("Additional information"),
         max_length=128,
+        null=True,
+        blank=True,
     )
+    lat = models.DecimalField(
+        _("Latitude"), max_digits=9, decimal_places=6, blank=True)
+    lng = models.DecimalField(
+        _("Longitude"), max_digits=9, decimal_places=6, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.lat, self.lng = get_address_lat_lng(
+            full_address=f"КАЗАХСТАН {self.city} {self.street} {self.house_number} {self.block}"
+        )
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Address")
@@ -303,39 +385,6 @@ class ServiceCenter(models.Model):
 
     def __str__(self):
         return self.name
-
-    def get_absolute_url(self):
-        return reverse("_detail", kwargs={"pk": self.pk})
-
-
-class Payment(models.Model):
-    class STATUS(models.IntegerChoices):
-        PENDING = 0, _("Pending")
-        SUCCESSFUL = 1, _("Successful")
-        FAILED = 2, _("Failed")
-
-    client = models.ForeignKey(
-        "core.Client",
-        verbose_name=_("Client"),
-        related_name="payments",
-        on_delete=models.DO_NOTHING,
-    )
-    document_order = models.OneToOneField(
-        "core.DocumentOrder",
-        verbose_name=_("Document Order"),
-        related_name="payment",
-        on_delete=models.DO_NOTHING,
-    )
-    status = models.PositiveSmallIntegerField(
-        _("Status"), choices=STATUS.choices, default=STATUS.PENDING
-    )
-
-    class Meta:
-        verbose_name = _("Payment")
-        verbose_name_plural = _("Payments")
-
-    def __str__(self):
-        return f"{self.document_order} - {self.status.name}"
 
     def get_absolute_url(self):
         return reverse("_detail", kwargs={"pk": self.pk})

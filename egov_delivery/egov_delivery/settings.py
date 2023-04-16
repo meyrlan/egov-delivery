@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ SECRET_KEY = "django-insecure-0x6w3*16gahfx469yia&9#)q2lcebrula901m5=jdy9p+u^6dd
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 CORS_ORIGIN_ALLOW_ALL = True
 
 
@@ -39,6 +40,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework.authtoken",
     "rest_framework_swagger",
     "corsheaders",
     "drf_yasg",
@@ -92,6 +95,22 @@ DATABASES = {
 # https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
 
 AUTH_USER_MODEL = "core.User"
+USER_ID_FIELD = 'iin'
+
+SIMPLE_JWT = {
+    'USER_ID_FIELD': 'iin',
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=10),
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        # TODO: add auth later
+        # 'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.BasicAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -138,3 +157,6 @@ EGOV_API_PASSWORD = "DjrsmA9RMXRl"
 EGOV_API_CLIENT_ID = "cw-queue-service"
 EGOV_API_GRANT_TYPE = "password"
 EGOV_DOCUMENT_ORDER_TOKEN = "eyJG6943LMReKj_kqdAVrAiPbpRloAfE1fqp0eVAJ-IChQcV-kv3gW-gBAzWztBEdFY"
+FRONTEND_URL = "https://vk.com/feed"
+STRIPE_SECRET_KEY = "sk_test_51MxDlZHnIM2cFSxk4TBdDhQkpv2ACJtnEQsfATR9UrEWeHnotSlcEvDpL6rFk0DC08TZXYJAPefh0RxLOefEHRdI00fwTELIL9"
+# STRIPE_SECRET_KEY = "sk_test_51LNz1YGdLai5r9QHCUM89frpWgMYps63Nr3wvzh8bwkFLih4e8gTzRspGBKzVz8VmeC8wMjKr7h2WR6fPHco4yrW006YrRQOOr"

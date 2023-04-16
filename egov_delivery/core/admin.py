@@ -50,7 +50,17 @@ class CourierAdminModel(admin.ModelAdmin):
     list_display = (
         "iin",
         "phone_number",
+        "role",
         "courier_company",
+        "service_center",
+    )
+    fields = (
+        "iin",
+        "password",
+        "phone_number",
+        "role",
+        "courier_company",
+        "service_center",
     )
 
 
@@ -61,4 +71,18 @@ class AddressAdminModel(admin.ModelAdmin):
         "house_number",
         "region",
         "city",
+    )
+    form = AddressForm
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if obj:
+            readonly_fields += ['lat', 'lng']
+        return readonly_fields
+
+
+@admin.register(DocumentOrder)
+class DocumentOrderAdminModel(admin.ModelAdmin):
+    list_display = (
+        "request_id",
     )
